@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
+from mpmath.libmp import to_bstr
 from torch import Tensor
+
+from cs336_basics import pretokenization_example
+from cs336_basics.pretokenization_example import multi_process_pretokenizer
+from cs336_basics.train_tokenizer import train_tokenizer
 
 
 def run_linear(
@@ -589,4 +595,24 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    # 对文件进行预分词
+    text_preTokenized = multi_process_pretokenizer(input_path, special_tokens)
+    # 对字符串用hash表记录每个串出现次数
+    string_counter = Counter(text_preTokenized)
+    # 将str转为bytes
+    bytes_list: list[tuple[list[bytes], int]] = []
+    for text, count in string_counter.items():
+        encoded = text.encode("utf-8")
+        bytes_list.append(
+            # 采用bytes(b)会导致生成b大小数量的二进制字节，而不是b的bytes码(前者用来分配内存)
+            ([encoded[i:i+1] for i in range(len(encoded))], count)
+        )
+    vocab_dict: dict[int, bytes] = {}
+    for i in range(256):
+        vocab_dict[i] = i.to_bytes(1, byteorder="big")
+    cur_size = 256
+    for token in special_tokens:
+        vocab_dict[cur_size] = token.encode("utf-8")
+        cur_size += 1
+    results = train_tokenizer(bytes_list, vocab_size, cur_size, vocab_dict)
+    return results
