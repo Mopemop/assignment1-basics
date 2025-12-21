@@ -138,20 +138,17 @@ def multi_process_pretokenizer(path, special_tokens: list[str]):
 def train_tokenizer(bytes_list: list[tuple[NodeList, int]], vocab_size: int, cur_size: int, vocab_dict: dict[int, bytes]) \
         -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
     merges: list[tuple[bytes, bytes]] = []
+    new_pair: dict[tuple[bytes, bytes], int] = {}
+    # 从所有bytes_list中找到最多的pair
+    for b_list, count in bytes_list:
+        node = b_list.head.next
+        tail = b_list.tail
+        while node.next is not tail:
+            key = (node.data, node.next.data)
+            new_pair[key] = new_pair.get(key, 0) + count
+            node = node.next
     # 反复merge至词表长度到vocab_size或无法扩增
     while cur_size < vocab_size:
-        # 从所有bytes_list中找到最多的pair
-        new_pair: dict[tuple[bytes, bytes], int] = {}
-        for b_list, count in bytes_list:
-            length = b_list.length
-            node = b_list.head.next
-            tail = b_list.tail
-            while node.next is not tail:
-                key = (node.data, node.next.data)
-                new_pair[key] = new_pair.get(key, 0) + count
-                node = node.next
-        if new_pair == {}:
-            break
         best_pair = max(new_pair, key=lambda k: (new_pair[k], k))
         # 将pair记录进merges和vocab_dict
         merges.append(best_pair)
@@ -159,11 +156,20 @@ def train_tokenizer(bytes_list: list[tuple[NodeList, int]], vocab_size: int, cur
         vocab_dict[cur_size] = merged_bytes
         cur_size += 1
         # 更新bytes_list融合上一个pair
-        for b_list, _ in bytes_list:
+        for b_list, count in bytes_list:
             node = b_list.head.next
             tail = b_list.tail
+            head = b_list.head
             while node is not None and node.next is not None and node.next is not tail:
                 if node.data == best_pair[0] and node.next.data == best_pair[1]:
+                    # 更新new_pair
+                    new_pair[best_pair] -= count
+                    if node.next.next is not tail:
+                        new_pair[(node.next.data, node.next.next.data)] -= count
+                        new_pair[(merged_bytes, node.next.next.data)] = new_pair.get((merged_bytes, node.next.next.data), 0) + count
+                    if node.prev is not head:
+                        new_pair[(node.prev.data, node.data)] -= count
+                        new_pair[(node.prev.data, merged_bytes)] = new_pair.get((node.prev.data, merged_bytes), 0) + count
                     node.data = merged_bytes
                     node.next.next.prev = node
                     node.next = node.next.next
