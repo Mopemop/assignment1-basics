@@ -13,7 +13,7 @@ from torch import Tensor
 
 from cs336_basics import pretokenization_example
 from cs336_basics.pretokenization_example import multi_process_pretokenizer
-from cs336_basics.train_tokenizer import train_tokenizer
+from cs336_basics.pretokenization_example import train_tokenizer
 
 
 def run_linear(
@@ -596,17 +596,7 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     # 对文件进行预分词
-    text_preTokenized = multi_process_pretokenizer(input_path, special_tokens)
-    # 对字符串用hash表记录每个串出现次数
-    string_counter = Counter(text_preTokenized)
-    # 将str转为bytes
-    bytes_list: list[tuple[list[bytes], int]] = []
-    for text, count in string_counter.items():
-        encoded = text.encode("utf-8")
-        bytes_list.append(
-            # 采用bytes(b)会导致生成b大小数量的二进制字节，而不是b的bytes码(前者用来分配内存)
-            ([encoded[i:i+1] for i in range(len(encoded))], count)
-        )
+    bytes_list = multi_process_pretokenizer(input_path, special_tokens)
     vocab_dict: dict[int, bytes] = {}
     for i in range(256):
         vocab_dict[i] = i.to_bytes(1, byteorder="big")

@@ -1,12 +1,46 @@
 import itertools
 import os
+from collections import Counter
 from functools import partial
 from typing import BinaryIO
 from multiprocessing import pool, Pool
 import regex as re
 
-from cs336_basics.train_tokenizer import train_tokenizer
 
+class Node:
+    def __init__(self, data=None):
+        self.data = data
+        self.prev = None
+        self.next = None
+
+    def __repr__(self):
+        return str(self.data)
+
+class NodeList:
+    def __init__(self):
+        self.head = Node()
+        self.tail = Node()
+        self.head.next = self.tail
+        self.tail.prev = self.head
+        self.length = 0
+
+    def append(self, data):
+        node = Node()
+        node.data = data
+        node.next = self.tail
+        node.prev = self.tail.prev
+        self.tail.prev = node
+        node.prev.next = node
+        self.length += 1
+
+    def prepend(self, data):
+        node = Node()
+        node.data = data
+        node.prev = self.head
+        node.next = self.head.next
+        self.head.next = node
+        node.next.prev = node
+        self.length += 1
 
 def find_chunk_boundaries(
     file: BinaryIO,
@@ -66,7 +100,7 @@ def pretokenizer(chunk, special_tokens) -> list[str]:
     return result
 
 
-def multi_process_pretokenizer(path, special_tokens: list[str]) -> list[str]:
+def multi_process_pretokenizer(path, special_tokens: list[str]):
     ## Usage
     with open(path, "rb") as f:
         num_processes = 4
@@ -87,5 +121,57 @@ def multi_process_pretokenizer(path, special_tokens: list[str]) -> list[str]:
     with Pool(num_processes) as p:
         results = p.map(worker_func, chunks)
     # 并为一维string数组
-    results = list(itertools.chain.from_iterable(results))
-    return results
+    text_preTokenized = list(itertools.chain.from_iterable(results))
+    # 对字符串用hash表记录每个串出现次数
+    string_counter = Counter(text_preTokenized)
+    # 将str转为bytes
+    bytes_list: list[tuple[NodeList, int]] = []
+    for text, count in string_counter.items():
+        encoded = text.encode("utf-8")
+        new_node_list = NodeList()
+        for b in encoded:
+            # 采用bytes(b)会导致生成b大小数量的二进制字节，而不是b的bytes码(前者用来分配内存)
+            new_node_list.append(bytes([b]))
+        bytes_list.append((new_node_list, count))
+    return bytes_list
+
+def train_tokenizer(bytes_list: list[tuple[NodeList, int]], vocab_size: int, cur_size: int, vocab_dict: dict[int, bytes]) \
+        -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
+    merges: list[tuple[bytes, bytes]] = []
+    new_pair: dict[tuple[bytes, bytes], int] = {}
+    # 从所有bytes_list中找到最多的pair
+    for b_list, count in bytes_list:
+        node = b_list.head.next
+        tail = b_list.tail
+        while node.next is not tail:
+            key = (node.data, node.next.data)
+            new_pair[key] = new_pair.get(key, 0) + count
+            node = node.next
+    # 反复merge至词表长度到vocab_size或无法扩增
+    while cur_size < vocab_size:
+        best_pair = max(new_pair, key=lambda k: (new_pair[k], k))
+        # 将pair记录进merges和vocab_dict
+        merges.append(best_pair)
+        merged_bytes = best_pair[0] + best_pair[1]
+        vocab_dict[cur_size] = merged_bytes
+        cur_size += 1
+        # 更新bytes_list融合上一个pair
+        for b_list, count in bytes_list:
+            node = b_list.head.next
+            tail = b_list.tail
+            head = b_list.head
+            while node is not None and node.next is not None and node.next is not tail:
+                if node.data == best_pair[0] and node.next.data == best_pair[1]:
+                    # 更新new_pair
+                    new_pair[best_pair] -= count
+                    if node.next.next is not tail:
+                        new_pair[(node.next.data, node.next.next.data)] -= count
+                        new_pair[(merged_bytes, node.next.next.data)] = new_pair.get((merged_bytes, node.next.next.data), 0) + count
+                    if node.prev is not head:
+                        new_pair[(node.prev.data, node.data)] -= count
+                        new_pair[(node.prev.data, merged_bytes)] = new_pair.get((node.prev.data, merged_bytes), 0) + count
+                    node.data = merged_bytes
+                    node.next.next.prev = node
+                    node.next = node.next.next
+                node = node.next
+    return vocab_dict, merges
