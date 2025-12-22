@@ -11,9 +11,10 @@ from jaxtyping import Bool, Float, Int
 from mpmath.libmp import to_bstr
 from torch import Tensor
 
-from cs336_basics import pretokenization_example
-from cs336_basics.pretokenization_example import multi_process_pretokenizer
-from cs336_basics.pretokenization_example import train_tokenizer
+from cs336_basics import train_tokenizer
+from cs336_basics.tokenizer import Tokenizer
+from cs336_basics.train_tokenizer import multi_process_pretokenizer
+from cs336_basics.train_tokenizer import train_tokenizer
 
 
 def run_linear(
@@ -565,7 +566,8 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    tokenizer = Tokenizer(vocab, merges, special_tokens=special_tokens)
+    return tokenizer
 
 
 def run_train_bpe(

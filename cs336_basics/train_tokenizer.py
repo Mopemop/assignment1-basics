@@ -91,11 +91,12 @@ def find_chunk_boundaries(
 
 def pretokenizer(chunk, special_tokens) -> list[str]:
     # 先针对special_tokens进行转义加分割
-    chunk_without_special = re.split("|".join(re.escape(s) for s in special_tokens), chunk)
+    if special_tokens is not None:
+        chunk = re.split("|".join(re.escape(s) for s in special_tokens), chunk)
     # 预分词的分割正则表达式
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
     result: list[str] = []
-    for string in chunk_without_special:
+    for string in chunk:
         result.extend(re.findall(PAT, string))
     return result
 
