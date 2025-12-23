@@ -1,6 +1,8 @@
 import itertools
 from collections import Counter
 from collections.abc import Iterable, Iterator
+from urllib.parse import to_bytes
+
 import regex as re
 
 from cs336_basics.train_tokenizer import multi_process_pretokenizer, pretokenizer, NodeList
@@ -29,7 +31,7 @@ class Tokenizer:
         # 将str转为bytes
         split_texts: list[str] = []
         for text in texts:
-            if text not in self.special_tokens:
+            if self.special_tokens is not None and text not in self.special_tokens:
                 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
                 split_texts.extend(re.findall(PAT, text))
             else:
@@ -76,7 +78,11 @@ class Tokenizer:
         return result
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        raise NotImplementedError
+        results: list[int] = []
+        for string in iterable:
+            # if string is not None:
+            results.extend(self.encode(string))
+        return iter(results)
 
     def decode(self, ids: list[int]) -> str:
         tokens: bytes = b""
