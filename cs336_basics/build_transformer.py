@@ -62,3 +62,21 @@ class RMSNorm(nn.Module):
                     x[b][s][d] = a/rms
         x = x*self.g
         return x.to(dtype=d_type)
+
+
+class FFN(nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
+        super().__init__()
+        if device is None:
+            device = torch.device("cpu")
+        if dtype is None:
+            dtype = torch.float32
+        self.linear1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.linear2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.linear3 = Linear(d_model, d_ff, device=device, dtype=dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        y = self.linear1(x)
+        x = y*torch.sigmoid(y)*self.linear3(x)
+        x = self.linear2(x)
+        return x
