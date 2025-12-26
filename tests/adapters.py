@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import os
-from collections import Counter
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
-from mpmath.libmp import to_bstr
-from torch import Tensor
+from torch import Tensor, nn
 
 from cs336_basics import train_tokenizer
+from cs336_basics.build_transformer import Linear, Embedding, RMSNorm
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.train_tokenizer import multi_process_pretokenizer
 from cs336_basics.train_tokenizer import train_tokenizer
@@ -35,8 +34,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
-    raise NotImplementedError
+    device= torch.device("cpu")
+    linear = Linear(d_in,  d_out, device).to(device)
+    linear.load_state_dict({"weight": weights})
+    return linear.forward(in_features)
 
 
 def run_embedding(
@@ -57,8 +58,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
-    raise NotImplementedError
+    device = torch.device("cpu")
+    embedding = Embedding(vocab_size, d_model).to(device)
+    embedding.load_state_dict({"matrix": weights})
+    return embedding.forward(token_ids)
 
 
 def run_swiglu(
@@ -385,7 +388,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    RMSnorm = RMSNorm(d_model, eps, device).to(device)
+    RMSnorm.load_state_dict({"g" : weights})
+    return RMSnorm.forward(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:

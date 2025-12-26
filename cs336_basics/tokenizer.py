@@ -1,7 +1,7 @@
 import itertools
 from collections import Counter
 from collections.abc import Iterable, Iterator
-from urllib.parse import to_bytes
+# from urllib.parse import to_bytes
 
 import regex as re
 
