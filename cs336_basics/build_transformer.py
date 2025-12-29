@@ -80,3 +80,37 @@ class FFN(nn.Module):
         x = y*torch.sigmoid(y)*self.linear3(x)
         x = self.linear2(x)
         return x
+
+
+class RoTry(nn.Module):
+    def __init__(self, d_k: int, theta: float, max_seq_len: int, device=None):
+        super().__init__()
+        self.d_k = d_k
+        thetas = torch.empty(max_seq_len, d_k//2, 2, device=device, dtype=torch.float32)
+        for p in range(max_seq_len):
+            for k in range(d_k//2):
+                theta_k = p*1.0/(theta**((2*k)/d_k))
+                thetas[p][k][0] = math.cos(theta_k)
+                thetas[p][k][1] = math.sin(theta_k)
+        self.register_buffer("thetas", thetas, persistent=False)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        def position_embed(x_b, token_positions_b):
+            seq_len = token_positions_b.shape[0]
+            x_reshape = einops.rearrange(x_b, "sequence_length (d h) -> sequence_length d h", d=self.d_k // 2, h=2)
+            for p in range(seq_len):
+                for d in range(self.d_k//2):
+                    z = x_reshape[p][d][0]*self.thetas[token_positions_b[p]][d][0]-x_reshape[p][d][1]*self.thetas[token_positions_b[p]][d][1]
+                    y = x_reshape[p][d][0]*self.thetas[token_positions_b[p]][d][1]+x_reshape[p][d][1]*self.thetas[token_positions_b[p]][d][0]
+                    x_reshape[p][d][0] = z
+                    x_reshape[p][d][1] = y
+            return einops.rearrange(x_reshape, "sequence_length d h -> sequence_length (d h)")
+        print(x.shape)
+        print(token_positions.shape)
+        if x.dim() == 3:
+            batch_size = x.shape[0]
+            for b in range(batch_size):
+                x[b] = position_embed(x[b], token_positions)
+        else:
+            x = position_embed(x, token_positions)
+        return x

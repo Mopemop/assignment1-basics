@@ -10,7 +10,7 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from cs336_basics import train_tokenizer
-from cs336_basics.build_transformer import Linear, Embedding, RMSNorm, FFN
+from cs336_basics.build_transformer import Linear, Embedding, RMSNorm, FFN, RoTry
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.train_tokenizer import multi_process_pretokenizer
 from cs336_basics.train_tokenizer import train_tokenizer
@@ -213,7 +213,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    rotry = RoTry(d_k=d_k, theta=theta, max_seq_len=max_seq_len, device=device)
+    return rotry.forward(in_query_or_key, token_positions)
 
 
 def run_transformer_block(
