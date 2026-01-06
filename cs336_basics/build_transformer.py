@@ -1,10 +1,14 @@
 import math
 
 import einops
-from torch import nn
+import numpy as np
+from jaxtyping import Float, Bool
+from torch import nn, Tensor
 from torch.nn import init
 from torch.nn.init import trunc_normal_
 import torch
+
+from cs336_basics.nn_utils import softmax
 
 
 class Linear(nn.Module):
@@ -114,3 +118,12 @@ class RoTry(nn.Module):
         else:
             x = position_embed(x, token_positions)
         return x
+
+def dot_attention(Q: Float[Tensor, " ... queries d_k"], K: Float[Tensor, " ... keys d_k"], V: Float[Tensor, " ... values d_v"], mask: Bool[Tensor, " ... queries keys"] | None = None):
+    K = einops.rearrange(K, "... keys d_k -> ... d_k keys")
+    d_k = Q.size(-1)
+    score = (Q @ K) / math.sqrt(d_k)
+    if mask is not None:
+        score = score.masked_fill(~mask, -1e9)
+    result = softmax(score, dim=-1) @ V
+    return result

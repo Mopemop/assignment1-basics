@@ -10,7 +10,8 @@ from jaxtyping import Bool, Float, Int
 from torch import Tensor, nn
 
 from cs336_basics import train_tokenizer
-from cs336_basics.build_transformer import Linear, Embedding, RMSNorm, FFN, RoTry
+from cs336_basics.build_transformer import Linear, Embedding, RMSNorm, FFN, RoTry, dot_attention
+from cs336_basics.nn_utils import softmax
 from cs336_basics.tokenizer import Tokenizer
 from cs336_basics.train_tokenizer import multi_process_pretokenizer
 from cs336_basics.train_tokenizer import train_tokenizer
@@ -117,7 +118,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return dot_attention(Q=Q, K=K, V=V, mask=mask)
 
 
 def run_multihead_self_attention(
@@ -449,7 +450,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    return softmax(in_features, dim)
 
 
 def run_cross_entropy(
