@@ -55,15 +55,8 @@ class RMSNorm(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         d_type = x.dtype
         x = x.to(dtype=torch.float32)
-        for b, batch in enumerate(x):
-            for s, sequence in enumerate(batch):
-                rms: torch.float32
-                a_sum: torch.float32 = 0
-                for a in sequence:
-                    a_sum += a**2
-                rms = math.sqrt(a_sum/self.d_model+self.eps)
-                for d, a in enumerate(sequence):
-                    x[b][s][d] = a/rms
+        variance = x.pow(2).mean(-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.eps)
         x = x*self.g
         return x.to(dtype=d_type)
 
@@ -109,8 +102,6 @@ class RoTry(nn.Module):
                     x_reshape[p][d][0] = z
                     x_reshape[p][d][1] = y
             return einops.rearrange(x_reshape, "sequence_length d h -> sequence_length (d h)")
-        print(x.shape)
-        print(token_positions.shape)
         if x.dim() == 3:
             batch_size = x.shape[0]
             for b in range(batch_size):
@@ -119,11 +110,39 @@ class RoTry(nn.Module):
             x = position_embed(x, token_positions)
         return x
 
+class MultiHeadAttentionWithoutROPE(nn.Module):
+    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.d_model = d_model
+        self.num_heads = num_heads
+
+        self.d_k = d_model // num_heads
+        self.d_v = self.d_k
+
+        self.q_linear = Linear(self.d_model, self.num_heads * self.d_k)
+        self.k_linear = Linear(self.d_model, self.num_heads * self.d_k)
+        self.v_linear = Linear(self.d_model, self.num_heads * self.d_v)
+        self.out = Linear(self.num_heads * self.d_v, self.d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        Q = self.q_linear(x)
+        K = self.k_linear(x)
+        V = self.v_linear(x)
+        Q = einops.rearrange(Q, "... seq (num_head d_k) -> ... num_head seq d_k", num_head=self.num_heads, d_k=self.d_model//self.num_heads)
+        K = einops.rearrange(K, "... seq (num_head d_k) -> ... num_head seq d_k", num_head=self.num_heads, d_k=self.d_model//self.num_heads)
+        V = einops.rearrange(V, "... seq (num_head d_v) -> ... num_head seq d_v", num_head=self.num_heads, d_v=self.d_model//self.num_heads)
+        mask = torch.tril(torch.ones(Q.size(-2), Q.size(-2))).bool()
+        O = dot_attention(Q, K, V, mask)
+        O = einops.rearrange(O, "... num_head seq d_v -> ... seq (num_head d_v)")
+        return self.out(O)
+
+
 def dot_attention(Q: Float[Tensor, " ... queries d_k"], K: Float[Tensor, " ... keys d_k"], V: Float[Tensor, " ... values d_v"], mask: Bool[Tensor, " ... queries keys"] | None = None):
     K = einops.rearrange(K, "... keys d_k -> ... d_k keys")
     d_k = Q.size(-1)
     score = (Q @ K) / math.sqrt(d_k)
     if mask is not None:
-        score = score.masked_fill(~mask, -1e9)
+        score = score.masked_fill(~mask, torch.finfo(score.dtype).min)
     result = softmax(score, dim=-1) @ V
     return result
